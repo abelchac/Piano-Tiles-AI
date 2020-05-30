@@ -23,6 +23,10 @@ theta = None
 cur = 0
 game_start = 0
 state = None
+score = 0
+max_length = 10
+thetas = []
+scores = []
 
 def image_collection():
 		file = "images/test.png"
@@ -99,6 +103,28 @@ def game_board():
 	return data
 
 
+def storeNet():
+	global thetas
+	global theta
+	global scores
+
+	if(len(thetas) < max_length):
+		thetas.append(theta)
+		scores.append(cur)
+	else: 
+		minpos = scores.index(min(scores))
+		theta[minpos] = theta
+		scores[minpos] = scores
+
+def avgNet():
+	global state
+	avg = np.zeros((state.size, 4 ))
+	global thetas
+	for theta in thetas:
+		avg = theta + avg
+
+	return avg / len(thetas)
+
 prevTheta = None
 def evolve():
 	global prevTheta
@@ -106,14 +132,20 @@ def evolve():
 	global prevHigh
 	global theta
 	global state
+	global score
 	dif = cur - prevHigh
 	growth = 0
 
+	storeNet()
+	theta = avgNet()
+
 	if(prevHigh > 0):
 		growth = dif/prevHigh
+		score = dif/prevHigh + 1 * cur
 		theta = theta + growth * theta
 	elif(game_start):
 		theta = theta * 1.5 / (prevHigh + 1)
+		score = 1
 	else:
 		#print("rand")
 		grow = random()
@@ -226,6 +258,10 @@ restarting = 0
 
 try:
 	theta = pickle.load(open("Model","rb"))
+	thetas = pickle.load(open("thetas", "rb"))
+	highscore = pickle.load(open("highscore", "rb"))
+	prevHigh = pickle.load(open("prevHigh", "rb"))
+
 	intial = 0;
 except (OSError, IOError) as e:
 	()
@@ -277,6 +313,10 @@ while True:
 		#print(now1)
 		sleep(.1)
 	except KeyboardInterrupt:
+		#pickle.dump(theta, open("Model","wb"))
+		pickle.dump(thetas,  open("Theats","wb"))
 		pickle.dump(theta, open("Model","wb"))
+		highscore = pickle.dump(highscore, open("highscore", "wb"))
+		pickle.dump(prevHigh ,open("prevHigh", "wb"))
 		break
 
