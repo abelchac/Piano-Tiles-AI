@@ -31,8 +31,10 @@ def image_collection():
 		#invert the image then grazy scale it so the white numbers
 		#turn black
 		sct = mss.mss()
-		im = sct.grab({"left":160,"top":460,"width": 650 - 160, "height": 580-460})
+		#im = sct.grab({"left":160,"top":460,"width": 650 - 160, "height": 580-460})
+		im = sct.grab({"left":275,"top":550,"width": 730, "height": 150})
 		im = Image.frombytes("RGB", im.size, im.bgra, "raw", "BGRX")
+		#im.show()
 		im = ImageOps.invert(im)
 		im = im.convert('LA')
 
@@ -82,9 +84,11 @@ def game_board():
 	global game_start
 	sct = mss.mss()
 	if(game_start):
-		imag = sct.grab({"left":161,"top":760,"width": 650 - 161, "height": 210})
+		#imag = sct.grab({"left":161,"top":760,"width": 650 - 161, "height": 210})
+		imag = sct.grab({"left":275,"top":1020,"width": 730, "height": 200})
 	else:
-		imag = sct.grab({"left":161,"top":570,"width": 650 - 161, "height": 210})
+		imag = sct.grab({"left":275,"top":740,"width": 730, "height": 200})
+		#imag = sct.grab({"left":161,"top":570,"width": 700, "height": 210})
 		
 	imag = Image.frombytes("RGB", imag.size, imag.bgra, "raw", "BGRX")
 	imag = ImageOps.invert(imag)
@@ -178,21 +182,28 @@ def play():
 	if(restarting):
 		return
 
-	left = 160
-	right = 650
+	# left = 160
+	# right = 650
+	left = 275
+	right = 730 + 275
+
 	if(game_start):
-		top = 760
-		bottom = 950
+		#top = 760
+		#bottom = 950
+		top = 1020
+		bottom  = 1020 + 200
 	else:
-		top = 570
-		bottom = 780
+		top = 730
+		bottom = 200 + 730
+		#top = 570
+		#bottom = 780
 
 	scaleX = scale(outputs[0], right, left)
 	scaleY = scale(outputs[1], bottom, top)
 
 	click = 1 if outputs[2] < outputs[3] else 0
 	#print(outputs)
-	#print(scaleX, scaleY, click)
+	print(scaleX, scaleY, click)
 	if(click):
 		()
 		#print(scaleX)
@@ -214,7 +225,8 @@ def restart_game():
 	game_start = 0
 	cur = 0
 	pyautogui.mouseUp()
-	pyautogui.mouseDown(400, 940)
+	#pyautogui.mouseDown(400, 940)
+	pyautogui.mouseDown(650, 1170)
 	pyautogui.mouseUp()
 
 #Varibles needed for later 
@@ -236,7 +248,7 @@ while True:
 		#print(game_start)
 		txt = image_collection()
 
-		#print("Here is the number" + txt)
+		print("Here is the number" + txt)
 		#so we're just going to keep checking if there is a number
 		#because when there isn't one we're still playing
 		#but becasue the numbers cout up during the score
@@ -247,7 +259,7 @@ while True:
 		if(str.isdigit(txt)):
 			#set the current value 
 			cur = int(txt)
-			#print(txt)
+			print(txt)
 			#check if the value is the same 
 			if(prevNum == cur):
 				#check if the cur score is greater than highscore
@@ -260,10 +272,13 @@ while True:
 				#this is where the NN will shift weights based on score
 				#restarts the game
 				while(str.isdigit(image_collection())):
+					print("her")
 					restart_game()
 
+				print("here")
 				restarting = 0
-				sleep(2)
+
+				sleep(3)
 				evolve()
 			#change the value of the previous score
 			prevNum = cur
@@ -273,6 +288,7 @@ while True:
 			#this will attempt to play the game with the NN
 			if(not restarting):
 				play()
+		
 		#now1 = datetime.datetime.now() - now
 		#print(now1)
 		sleep(.1)
