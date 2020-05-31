@@ -13,7 +13,7 @@ import pyautogui
 import datetime
 from random import random 
 import pickle
-
+import logging
 #pyautogui.PAUSE = 1
 pyautogui.FAILESAFE = True
 intial = 1
@@ -27,6 +27,7 @@ score = 0
 max_length = 10
 thetas = []
 scores = []
+clicks = 0
 
 def image_collection():
 		file = "images/test.png"
@@ -43,6 +44,7 @@ def image_collection():
 		#save the image so i can open it back up with cv2
 		#idk another way to do this because using the np array 
 		#wasn't working
+
 		im.save(file)
 
 		#read the image back in and gray sacle it again, idk 
@@ -61,6 +63,7 @@ def image_collection():
 
 		#open back the image 		
 		img = Image.open(file)
+
 		#img.show()
 
 		#now tesseract will extract images from the string 
@@ -70,10 +73,12 @@ def image_collection():
 		#oem is the ocr engine mode which 3 means the default mode
 		#could set it to 2 to use LSTM and tesseract 
 		#then the white liist is set for characters
+		# now = datetime.datetime.now()
 
 		txt = pytesseract.image_to_string(img, lang='eng',
            config='--psm 10')
-
+		# now1 = datetime.datetime.now() - now
+		# print(now1)
 		# txt = pytesseract.image_to_string(img, lang='eng',
   #          config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
 
@@ -81,9 +86,11 @@ def image_collection():
 
 
 #gets the gameboad so it can be fed into the NN
+imag = None
 def game_board():
 	#grabs the bounding box of the game and gray scales it
 	global game_start
+	global imag
 	sct = mss.mss()
 	if(game_start):
 		imag = sct.grab({"left":161,"top":760,"width": 650 - 161, "height": 210})
@@ -107,18 +114,33 @@ def storeNet():
 	global thetas
 	global theta
 	global scores
+	global score
+	global logger
+
 
 	if(len(thetas) < max_length):
 		thetas.append(theta)
-		scores.append(cur)
+		scores.append(score)
 	else: 
 		minpos = scores.index(min(scores))
-		theta[minpos] = theta
-		scores[minpos] = scores
+		if(scores[minpos] <= score):
+			thetas[minpos] = theta
+			scores[minpos] = score
+
+	if(len(scores) == 0):
+		logger.info("0")
+	else :
+		average = sum(scores) * 1.0 / len(scores) 
+		# print(sum(scores))
+		# print(average)
+		# print(len(scores))
+		string  = "{}".format(average)
+		logger.info(string)
+
 
 def avgNet():
 	global state
-	avg = np.zeros((state.size, 4 ))
+	avg = np.zeros((4, state.size + 1))
 	global thetas
 	for theta in thetas:
 		avg = theta + avg
@@ -133,26 +155,41 @@ def evolve():
 	global theta
 	global state
 	global score
-	dif = cur - prevHigh
+	global scores
+	global thetas
+	global clicks
+	print("cur", cur)
+	dif = cur - prevHigh 
+	print("dif", dif)
+
 	growth = 0
 
-	storeNet()
-	theta = avgNet()
+	
+
 
 	if(prevHigh > 0):
-		growth = dif/prevHigh
-		score = dif/prevHigh + 1 * cur
+		growth = dif * 1.0/prevHigh * .7
+		score = dif * 1.0 /prevHigh + 1 * cur + score * 1.0 /click
+		print("here is score" + score)
+		storeNet()
+		theta = avgNet()
 		theta = theta + growth * theta
-	elif(game_start):
-		theta = theta * 1.5 / (prevHigh + 1)
-		score = 1
+	elif(game_start and len(thetas) != 10):
+		score = 1 + score * 1.0 /click
+		storeNet()
+		theta = avgNet()
+		theta = theta * 1.5 * cur / (prevHigh + 1) 
+		
 	else:
 		#print("rand")
-		grow = random()
+		grow = np.random.rand(4,4) - .5
 		#print(np.shape(grow))
 		#print(np.shape(theta))
+		score = 0
+		storeNet()
+		theta = avgNet()
 		prevTheta = theta
-		theta =  theta + (theta * (random() - .5)) * 5
+		theta =  theta + np.matmul(grow, theta) * 2.5
 
 	
 	cur = 0
@@ -164,15 +201,19 @@ def network():
 	state = game_board()
 	#normalize the scale of rgb
 	X = state
+	bias = [1]
+	X = np.vstack([bias, X])
 	#checks if the game board from before is the same,
 	#if so we need some changes
 	global prevState
 	global theta
 	global intial
 	global game_start
+	global restarting
+	global imag
 	#checks if this is the first run if so then randomize
 	if(intial):
-		theta = np.random.rand(4, state.size )
+		theta = np.random.rand(4, X.size )
 		intial = 0;
 
 	#print(theta)
@@ -182,8 +223,12 @@ def network():
 		if(not game_start):
 			evolve()
 		else:
-			sleep(15)
-			retarting = 1
+			print("restarting")
+			#imag.show()
+			sleep(16)
+			restarting = 1
+
+			return
 	#store the state
 	prevState = state
 
@@ -191,7 +236,7 @@ def network():
 	#4 x P times P x 1
 	y = np.matmul(theta, X)
 	#print(X)
-	print(y)
+	#print(y)
 	y = 1 / (1 + np.exp(-y))
 
 	#returns the output 
@@ -206,9 +251,11 @@ def play():
 
 	global game_start
 	global restarting
+	global clicks
 	outputs = network()
 	if(restarting):
-		return
+		print("leaving")
+		return None
 
 	left = 160
 	right = 650
@@ -225,6 +272,7 @@ def play():
 	click = 1 if outputs[2] < outputs[3] else 0
 	#print(outputs)
 	#print(scaleX, scaleY, click)
+	clicks = click + 1
 	if(click):
 		()
 		#print(scaleX)
@@ -235,8 +283,11 @@ def play():
 		pyautogui.mouseDown(scaleX, scaleY)
 		pyautogui.mouseUp()
 
-	
-
+logging.basicConfig(filename="newfile.log", 
+                    format='%(asctime)s %(message)s', 
+                    filemode='w') 
+logger=logging.getLogger()
+logger.setLevel(logging.DEBUG)  
 #clicks the restart button
 def restart_game():
 	global game_start
@@ -245,6 +296,7 @@ def restart_game():
 	prevState = None
 	game_start = 0
 	cur = 0
+	pyautogui.moveTo(400, 940)
 	pyautogui.mouseUp()
 	pyautogui.mouseDown(400, 940)
 	pyautogui.mouseUp()
@@ -261,6 +313,7 @@ try:
 	thetas = pickle.load(open("thetas", "rb"))
 	highscore = pickle.load(open("highscore", "rb"))
 	prevHigh = pickle.load(open("prevHigh", "rb"))
+	scores = pickle.load(open("scores","rb"))
 
 	intial = 0;
 except (OSError, IOError) as e:
@@ -268,9 +321,8 @@ except (OSError, IOError) as e:
 
 while True:
 	try:
-		#now = datetime.datetime.now()
 		#print(game_start)
-		txt = image_collection()
+
 
 		#print("Here is the number" + txt)
 		#so we're just going to keep checking if there is a number
@@ -280,7 +332,10 @@ while True:
 		#before we keep going
 		#print(game_start)
 		#So only play the game if the numbers aren't there 
-		if(str.isdigit(txt)):
+		print(scores)
+		print("highscore", highscore)
+		if(restarting):
+			txt = image_collection()
 			#set the current value 
 			cur = int(txt)
 			#print(txt)
@@ -291,6 +346,7 @@ while True:
 					#set the highscore
 					prevHigh = highscore
 					highscore = cur
+					print("new score")
 				#reset tehe previous number
 				prevNum = -1
 				#this is where the NN will shift weights based on score
@@ -307,16 +363,15 @@ while True:
 
 		else:
 			#this will attempt to play the game with the NN
-			if(not restarting):
 				play()
-		#now1 = datetime.datetime.now() - now
-		#print(now1)
-		sleep(.1)
+				sleep(.1)
+		
 	except KeyboardInterrupt:
 		#pickle.dump(theta, open("Model","wb"))
 		pickle.dump(thetas,  open("Theats","wb"))
 		pickle.dump(theta, open("Model","wb"))
-		highscore = pickle.dump(highscore, open("highscore", "wb"))
+		pickle.dump(highscore, open("highscore", "wb"))
 		pickle.dump(prevHigh ,open("prevHigh", "wb"))
+		pickle.dump(scores ,open("scores", "wb"))
 		break
 
